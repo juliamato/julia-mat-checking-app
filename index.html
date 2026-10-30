@@ -1,0 +1,259 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f5f1">
+  <title>Julia & Mat</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #f7f5f1;
+      color: #37332f;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 28px 18px;
+    }
+    .container { max-width: 440px; margin: 35px auto; }
+    h1 { font-family: Georgia, serif; font-size: 34px; font-weight: 500; }
+    .sub { color: #898078; margin-bottom: 30px; }
+    .card {
+      background: white; border-radius: 18px;
+      padding: 22px; margin-bottom: 16px;
+      box-shadow: 0 3px 15px #00000008;
+    }
+    .person {
+      display: flex; justify-content: space-between;
+      align-items: center; padding: 13px 0;
+      border-bottom: 1px solid #eeeae5;
+    }
+    .person:last-child { border: 0; }
+    .name { font-weight: 600; font-size: 17px; }
+    .status { color: #8a7768; font-size: 14px; margin-top: 5px; }
+    .buttons { display: grid; gap: 10px; margin-top: 15px; }
+    button {
+      border: 0; border-radius: 12px; padding: 15px;
+      font-size: 15px; cursor: pointer;
+      background: #eae5df; color: #423a34;
+    }
+    button.primary { background: #788b78; color: white; }
+    button:disabled { opacity: .5; cursor: wait; }
+    input {
+      width: 100%; padding: 14px; margin: 8px 0;
+      border: 1px solid #ded8d0; border-radius: 10px;
+      font-size: 16px;
+    }
+    .small { font-size: 12px; color: #958b82; }
+    .hidden { display: none; }
+    #message { color: #a05e4f; font-size: 14px; margin-top: 12px; }
+    .top { display: flex; justify-content: space-between; align-items: center; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <h1>Julia & Mat</h1>
+    <div class="sub">A little connection, wherever we are ♡</div>
+
+    <section id="login" class="card">
+      <h2>Welcome back</h2>
+      <p class="small">Sign in to your private space</p>
+      <input id="email" type="email" placeholder="Email address">
+      <input id="password" type="password" placeholder="Password">
+      <button class="primary" id="loginBtn" style="width:100%">
+        Sign in
+      </button>
+      <div id="message"></div>
+    </section>
+
+    <section id="app" class="hidden">
+      <div class="top">
+        <p id="welcome"></p>
+        <button id="logoutBtn">Log out</button>
+      </div>
+
+      <div class="card">
+        <h3>Our status</h3>
+        <div class="person">
+          <div>
+            <div class="name">Julia</div>
+            <div class="status" id="juliaStatus">Loading...</div>
+          </div>
+          <span>♡</span>
+        </div>
+        <div class="person">
+          <div>
+            <div class="name">Mat</div>
+            <div class="status" id="matStatus">Loading...</div>
+          </div>
+          <span>♡</span>
+        </div>
+        <p class="small" id="lastUpdate"></p>
+      </div>
+
+      <div class="card">
+        <h3>Update my status</h3>
+        <div class="buttons">
+          <button id="workingBtn">☀️  上班了 · I'm at work</button>
+          <button id="finishedBtn">🚗  下班了 · I'm off work</button>
+          <button id="homeBtn" class="primary">🏡  到家了 · I'm home</button>
+        </div>
+        <div id="messageApp"></div>
+      </div>
+    </section>
+  </main>
+
+<script>
+  // Replace these two values with your own Supabase details.
+  const SUPABASE_URL = "https://gqibbzkjwxtjyxakfzk.supabase.co";
+  const SUPABASE_KEY =  "sb_publishable_J31o_dY70P0aaFIgFKS1Ow__A1jXakg";
+
+  const db = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+  );
+
+  const $ = id => document.getElementById(id);
+
+  let myPerson = null;
+  let refreshTimer = null;
+
+  const labels = {
+    not_started: "尚未更新",
+    working: "上班中 · At work",
+    finished: "已下班 · Finished work",
+    home: "已到家 · At home"
+  };
+
+  function message(text, app = false) {
+    $(app ? "messageApp" : "message").textContent = text;
+  }
+
+  async function loadStatuses() {
+    const { data, error } = await db
+      .from("couple_status")
+      .select("person,status,updated_at");
+
+    if (error) {
+      message("无法读取状态：" + error.message, true);
+      return;
+    }
+
+    const julia = data.find(x => x.person === "Julia");
+    const mat = data.find(x => x.person === "Mat");
+
+    $("juliaStatus").textContent =
+      julia ? labels[julia.status] || julia.status : "暂无记录";
+
+    $("matStatus").textContent =
+      mat ? labels[mat.status] || mat.status : "暂无记录";
+
+    const latest = data
+      .map(x => new Date(x.updated_at))
+      .sort((a,b) => b-a)[0];
+
+    if (latest) {
+      $("lastUpdate").textContent =
+        "Last updated: " + latest.toLocaleString();
+    }
+  }
+
+  async function showApp(user) {
+    const { data, error } = await db
+      .from("couple_members")
+      .select("person")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error || !data) {
+      message("这个账号尚未登记为 Julia 或 Mat，请检查成员设置。");
+      await db.auth.signOut();
+      return;
+    }
+
+    myPerson = data.person;
+    $("login").classList.add("hidden");
+    $("app").classList.remove("hidden");
+    $("welcome").textContent = "Hello, " + myPerson + " ♡";
+
+    await loadStatuses();
+
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(loadStatuses, 10000);
+  }
+
+  $("loginBtn").addEventListener("click", async () => {
+    message("");
+    const email = $("email").value.trim();
+    const password = $("password").value;
+
+    if (!email || !password) {
+      message("Please enter your email and password.");
+      return;
+    }
+
+    $("loginBtn").disabled = true;
+    $("loginBtn").textContent = "Signing in...";
+
+    const { data, error } = await db.auth.signInWithPassword({
+      email, password
+    });
+
+    $("loginBtn").disabled = false;
+    $("loginBtn").textContent = "Sign in";
+
+    if (error) {
+      message(error.message);
+      return;
+    }
+
+    await showApp(data.user);
+  });
+
+  async function updateStatus(status) {
+    message("Updating...", true);
+
+    const { error } = await db
+      .from("couple_status")
+      .update({
+        status: status,
+        updated_at: new Date().toISOString()
+      })
+      .eq("person", myPerson);
+
+    if (error) {
+      message("Update failed: " + error.message, true);
+      return;
+    }
+
+    message("Status updated successfully ♡", true);
+    await loadStatuses();
+  }
+
+  $("workingBtn").onclick = () => updateStatus("working");
+  $("finishedBtn").onclick = () => updateStatus("finished");
+  $("homeBtn").onclick = () => updateStatus("home");
+
+  $("logoutBtn").onclick = async () => {
+    clearInterval(refreshTimer);
+    await db.auth.signOut();
+    myPerson = null;
+    $("app").classList.add("hidden");
+    $("login").classList.remove("hidden");
+    $("password").value = "";
+    message("");
+  };
+
+  async function start() {
+    const { data } = await db.auth.getSession();
+    if (data.session) {
+      await showApp(data.session.user);
+    }
+  }
+
+  start();
+</script>
+</body>
+</html>
