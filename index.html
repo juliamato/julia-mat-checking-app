@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -72,7 +73,7 @@
     }
 
     .small { font-size: 12px; color: #958b82; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
 
     #message, #resetMessage {
       color: #a05e4f;
@@ -93,7 +94,7 @@
     <h1>Julia & Mat</h1>
     <div class="sub">A little connection, wherever we are ♡</div>
 
-    <!-- Login section -->
+    <!-- Login -->
     <section id="login" class="card">
       <h2>Welcome back</h2>
       <p class="small">Sign in to your private space</p>
@@ -112,7 +113,7 @@
       <div id="message"></div>
     </section>
 
-    <!-- Password reset section -->
+    <!-- Password reset -->
     <section id="reset" class="card hidden">
       <h2>Set a new password</h2>
       <p class="small">Please enter your new password.</p>
@@ -136,7 +137,7 @@
       <div id="resetMessage"></div>
     </section>
 
-    <!-- Main app section -->
+    <!-- Main app -->
     <section id="app" class="hidden">
       <div class="top">
         <p id="welcome"></p>
@@ -180,11 +181,14 @@
   </main>
 
 <script>
-  // Supabase connection
-  const SUPABASE_URL = "https://gqibbzkjwxtjyjxakfzk.supabase.co";
-  const SUPABASE_KEY = "sb_publishable_J31o_dY70P0aaFIgFKS1Ow__A1jXakg";
+  const SUPABASE_URL =
+    "https://gqibbzkjwxtjyxakfzk.supabase.co";
 
-  const SITE_URL = "https://juliamato.github.io/julia-mat-checking-app/";
+  const SUPABASE_KEY =
+    "sb_publishable_J31o_dY70P0aaFIgKS1Ow__A1jXakg";
+
+  const SITE_URL =
+    "https://juliamato.github.io/julia-mat-checking-app/";
 
   const db = window.supabase.createClient(
     SUPABASE_URL,
@@ -195,6 +199,7 @@
 
   let myPerson = null;
   let refreshTimer = null;
+  let recoveryMode = false;
 
   const labels = {
     not_started: "尚未更新",
@@ -208,6 +213,7 @@
   }
 
   function showResetForm() {
+    recoveryMode = true;
     $("login").classList.add("hidden");
     $("app").classList.add("hidden");
     $("reset").classList.remove("hidden");
@@ -215,14 +221,14 @@
       "Please enter and confirm your new password.";
   }
 
-  // Listen for Supabase password recovery
+  // Password recovery event
   db.auth.onAuthStateChange((event, session) => {
     if (event === "PASSWORD_RECOVERY" && session) {
       showResetForm();
     }
   });
 
-  // Send password recovery email
+  // Send password reset email
   $("forgotBtn").onclick = async () => {
     const email = $("email").value.trim();
 
@@ -232,14 +238,13 @@
     }
 
     $("forgotBtn").disabled = true;
-    $("forgotBtn").textContent = "Sending...";
+    message("Sending password reset email...");
 
     const { error } = await db.auth.resetPasswordForEmail(email, {
       redirectTo: SITE_URL
     });
 
     $("forgotBtn").disabled = false;
-    $("forgotBtn").textContent = "Forgot password?";
 
     message(
       error
@@ -248,7 +253,7 @@
     );
   };
 
-  // Save the new password
+  // Update password
   $("resetBtn").onclick = async () => {
     const password = $("newPassword").value;
     const confirm = $("confirmPassword").value;
@@ -266,14 +271,13 @@
     }
 
     $("resetBtn").disabled = true;
-    $("resetBtn").textContent = "Updating...";
+    $("resetMessage").textContent = "Updating password...";
 
     const { error } = await db.auth.updateUser({
       password: password
     });
 
     $("resetBtn").disabled = false;
-    $("resetBtn").textContent = "Update password";
 
     if (error) {
       $("resetMessage").textContent = error.message;
@@ -282,6 +286,7 @@
 
     await db.auth.signOut();
 
+    recoveryMode = false;
     $("reset").classList.add("hidden");
     $("login").classList.remove("hidden");
 
@@ -289,16 +294,9 @@
     $("confirmPassword").value = "";
     $("password").value = "";
 
-    message("Password updated! Please sign in.");
-
-    window.history.replaceState(
-      null,
-      "",
-      window.location.pathname
-    );
+    message("Password updated successfully! Please sign in.");
   };
 
-  // Load couple statuses
   async function loadStatuses() {
     const { data, error } = await db
       .from("couple_status")
@@ -328,7 +326,6 @@
     }
   }
 
-  // Show the main app
   async function showApp(user) {
     const { data, error } = await db
       .from("couple_members")
@@ -356,7 +353,7 @@
     refreshTimer = setInterval(loadStatuses, 10000);
   }
 
-  // Login
+  // Normal login
   $("loginBtn").addEventListener("click", async () => {
     message("");
 
@@ -387,7 +384,6 @@
     await showApp(data.user);
   });
 
-  // Update status
   async function updateStatus(status) {
     message("Updating...", true);
 
@@ -412,34 +408,29 @@
   $("finishedBtn").onclick = () => updateStatus("finished");
   $("homeBtn").onclick = () => updateStatus("home");
 
-  // Logout
   $("logoutBtn").onclick = async () => {
     clearInterval(refreshTimer);
-
     await db.auth.signOut();
 
     myPerson = null;
-
     $("app").classList.add("hidden");
     $("login").classList.remove("hidden");
     $("password").value = "";
-
     message("");
   };
 
   // Start app
   async function start() {
-    const isRecoveryLink =
-      window.location.hash.includes("type=recovery");
+    const hash = window.location.hash;
 
-    if (isRecoveryLink) {
+    if (hash.includes("type=recovery")) {
       showResetForm();
       return;
     }
 
     const { data } = await db.auth.getSession();
 
-    if (data.session) {
+    if (data.session && !recoveryMode) {
       await showApp(data.session.user);
     }
   }
