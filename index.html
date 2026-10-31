@@ -271,11 +271,36 @@
     }
 
     $("resetBtn").disabled = true;
-    $("resetMessage").textContent = "Updating password...";
+$("resetMessage").textContent = "Checking recovery session...";
 
-    const { error } = await db.auth.updateUser({
-      password: password
-    });
+const hash = new URLSearchParams(
+  window.location.hash.substring(1)
+);
+
+const accessToken = hash.get("access_token");
+const refreshToken = hash.get("refresh_token");
+
+if (!accessToken || !refreshToken) {
+  $("resetBtn").disabled = false;
+  $("resetMessage").textContent =
+    "Recovery link is missing. Please request a new password reset email.";
+  return;
+}
+
+const { error: sessionError } = await db.auth.setSession({
+  access_token: accessToken,
+  refresh_token: refreshToken
+});
+
+if (sessionError) {
+  $("resetBtn").disabled = false;
+  $("resetMessage").textContent = sessionError.message;
+  return;
+}
+
+const { error } = await db.auth.updateUser({
+  password: password
+});
 
     $("resetBtn").disabled = false;
 
