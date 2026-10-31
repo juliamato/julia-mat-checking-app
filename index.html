@@ -191,9 +191,14 @@
     "https://juliamato.github.io/julia-mat-checking-app/";
 
   const db = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_KEY
-  );
+  SUPABASE_URL,
+  SUPABASE_KEY,
+  {
+    auth: {
+      detectSessionInUrl: false
+    }
+  }
+);
 
   const $ = id => document.getElementById(id);
 
